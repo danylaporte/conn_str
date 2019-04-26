@@ -1,0 +1,7 @@
+[package]
+name = "conn_str"
+version = "0.1.0"
+authors = ["Dany Laporte <dany_laporte@hotmail.com>"]
+edition = "2018"
+
+[dependencies]
