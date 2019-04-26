@@ -8,15 +8,15 @@ A connection string parsing lib for rust.
 ## Example
 
 ```rust
-/// use conn_str::SqlConnStrBuilder;
-/// use std::str::FromStr;
-///
-/// let b = SqlConnStrBuilder::from_str("data source=.\\Sql2017;Initial Catalog=Db1;integrated security=sspi;pwd='Test=1'").unwrap();
-///
-/// assert_eq!(".\\Sql2017", b.data_source().unwrap());
-/// assert_eq!("Db1", b.initial_catalog().unwrap());
-/// assert_eq!(true, b.integrated_security());
-/// assert_eq!("Test=1", b.password().unwrap());
+use conn_str::SqlConnStrBuilder;
+use std::str::FromStr;
+
+let b = SqlConnStrBuilder::from_str("data source=.\\Sql2017;Initial Catalog=Db1;integrated security=sspi;pwd='Test=1'").unwrap();
+
+assert_eq!(".\\Sql2017", b.data_source().unwrap());
+assert_eq!("Db1", b.initial_catalog().unwrap());
+assert_eq!(true, b.integrated_security());
+assert_eq!("Test=1", b.password().unwrap());
 ```
 
 ## License
