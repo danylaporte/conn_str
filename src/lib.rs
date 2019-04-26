@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::error;
 use std::fmt;
-use std::mem::replace;
 use std::str::{CharIndices, FromStr};
 
 /// A Sql Connection String parsing error
@@ -145,6 +144,22 @@ impl SqlConnStrBuilder {
             .or_else(|| self.0.get("user"))
             .map(|s| s.as_str())
     }
+}
+
+#[test]
+fn sql_conn_builder_str_from_str_works() {
+    let s = r#"metadata=res://*/CashOnTime.csdl|res://*/CashOnTime.ssdl|res://*/CashOnTime.msl;provider=System.Data.SqlClient;provider connection string="data source=.\SQL2017;initial catalog=Trivia;integrated security=True;multipleactiveresultsets=True;application name=RustApp""#;
+    let e = EntityConnStrBuilder::from_str(s).unwrap();
+    let b = SqlConnStrBuilder::from_str(e.provider_connection_string().unwrap()).unwrap();
+
+    assert_eq!(".\\SQL2017", b.data_source().unwrap());
+    assert_eq!("Trivia", b.initial_catalog().unwrap());
+
+    let s = r#"Data Source=.;Initial Catalog=MasterDb;Integrated Security=False;User ID=me;Password="special=321";MultipleActiveResultSets=True;Application Name=RustApp"#;
+    let b = SqlConnStrBuilder::from_str(s).unwrap();
+
+    assert_eq!("special=321", b.password().unwrap());
+    assert_eq!("me", b.user_id().unwrap());
 }
 
 fn parse(
@@ -299,7 +314,7 @@ fn parse_key_value(
                         buf.push(c);
                         continue 'next;
                     } else {
-                        value = replace(&mut buf, String::new());
+                        value = buf.clone();
                         state = State::QuotedValueEnd;
                         continue;
                     }
@@ -321,7 +336,7 @@ fn parse_key_value(
                         buf.push(c);
                         continue 'next;
                     } else {
-                        value = replace(&mut buf, String::new());
+                        value = buf.clone();
                         state = State::QuotedValueEnd;
                         continue;
                     }
@@ -341,7 +356,7 @@ fn parse_key_value(
                         buf.push(c);
                         continue 'next;
                     } else {
-                        value = replace(&mut buf, String::new());
+                        value = buf.clone();
                         state = State::QuotedValueEnd;
                         continue;
                     }
@@ -394,7 +409,7 @@ fn parse_key_value(
             | State::SingleQuoteValueQuote
             | State::BraceQuoteValueQuote
             | State::QuotedValueEnd => {
-                value = replace(&mut buf, String::new());
+                value = buf.clone();
             }
             State::NothingYet | State::KeyEnd | State::NullTermination => {}
         }
