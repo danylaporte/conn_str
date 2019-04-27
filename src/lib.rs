@@ -126,6 +126,17 @@ impl MsSqlConnStr {
             .map(|s| s.as_str())
     }
 
+    pub fn encrypt(&self) -> Result<bool, Error> {
+        self.encrypt_or(false)
+    }
+
+    pub fn encrypt_or(&self, default: bool) -> Result<bool, Error> {
+        match self.0.get("encrypt") {
+            Some(v) => parse_bool(v),
+            None => Ok(default),
+        }
+    }
+
     pub fn initial_catalog(&self) -> Option<&str> {
         self.0
             .get("initial catalog")
@@ -153,9 +164,13 @@ impl MsSqlConnStr {
     }
 
     pub fn multiple_active_result_sets(&self) -> Result<bool, Error> {
+        self.multiple_active_result_sets_or(false)
+    }
+
+    pub fn multiple_active_result_sets_or(&self, default: bool) -> Result<bool, Error> {
         match self.0.get("multipleactiveresultsets") {
             Some(v) => parse_bool(v),
-            None => Ok(false),
+            None => Ok(default),
         }
     }
 
