@@ -3,62 +3,32 @@ use std::error;
 use std::fmt;
 use std::str::{CharIndices, FromStr};
 
-/// A Sql Connection String parsing error
-#[derive(Clone, Debug)]
-pub enum Error {
-    KeyNotSupported(String),
-    SyntaxError(usize),
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Error::KeyNotSupported(s) => {
-                write!(f, "sql connection string key `{}` not supported", s)
-            }
-            Error::SyntaxError(index) => {
-                write!(f, "parsing of sql connection string failed at `{}`", index)
-            }
-        }
-    }
-}
-
-impl error::Error for Error {
-    fn description(&self) -> &str {
-        "sql connection string key not supported"
-    }
-
-    fn cause(&self) -> Option<&error::Error> {
-        // Generic error, underlying cause isn't tracked.
-        None
-    }
-}
-
 /// Represent an Entity Framework Connection String
 ///
 /// # Example
 ///
 /// ```
-/// use conn_str::EntityConnStrBuilder;
+/// use conn_str::EFConnStr;
 /// use std::str::FromStr;
 ///
-/// let b = EntityConnStrBuilder
+/// let b = EFConnStr
 ///     ::from_str(r#"provider=System.Data.SqlClient;provider connection string="server=.\Sql2017;database=Db1""#)
 ///     .unwrap();
 ///
 /// assert_eq!("System.Data.SqlClient", b.provider().unwrap());
 /// assert_eq!("server=.\\Sql2017;database=Db1", b.provider_connection_string().unwrap());
 /// ```
-pub struct EntityConnStrBuilder(HashMap<String, String>);
+pub struct EFConnStr(HashMap<String, String>);
 
-impl FromStr for EntityConnStrBuilder {
+impl FromStr for EFConnStr {
     type Err = Error;
+
     fn from_str(conn_str: &str) -> Result<Self, Self::Err> {
-        Ok(EntityConnStrBuilder(parse(conn_str, false, None)?))
+        Ok(EFConnStr(parse(conn_str, false, None)?))
     }
 }
 
-impl EntityConnStrBuilder {
+impl EFConnStr {
     pub fn metadata(&self) -> Option<&str> {
         self.0.get("metadata").map(|s| s.as_str())
     }
@@ -81,27 +51,34 @@ impl EntityConnStrBuilder {
 /// # Example
 ///
 /// ```
-/// use conn_str::SqlConnStrBuilder;
+/// use conn_str::MsSqlConnStr;
 /// use std::str::FromStr;
 ///
-/// let b = SqlConnStrBuilder::from_str("data source=.\\Sql2017;Initial Catalog=Db1;integrated security=sspi;pwd='Test=1'").unwrap();
+/// let b = MsSqlConnStr::from_str("data source=.\\Sql2017;Initial Catalog=Db1;integrated security=sspi;pwd='Test=1'").unwrap();
 ///
 /// assert_eq!(".\\Sql2017", b.data_source().unwrap());
 /// assert_eq!("Db1", b.initial_catalog().unwrap());
-/// assert_eq!(true, b.integrated_security());
+/// assert_eq!(true, b.integrated_security().unwrap());
 /// assert_eq!("Test=1", b.password().unwrap());
 /// ```
-pub struct SqlConnStrBuilder(HashMap<String, String>);
+pub struct MsSqlConnStr(HashMap<String, String>);
 
-impl FromStr for SqlConnStrBuilder {
+impl FromStr for MsSqlConnStr {
     type Err = Error;
 
     fn from_str(conn_str: &str) -> Result<Self, Self::Err> {
-        Ok(SqlConnStrBuilder(parse(conn_str, false, None)?))
+        Ok(MsSqlConnStr(parse(conn_str, false, None)?))
     }
 }
 
-impl SqlConnStrBuilder {
+impl MsSqlConnStr {
+    pub fn application_name(&self) -> Option<&str> {
+        self.0
+            .get("application name")
+            .or_else(|| self.0.get("app"))
+            .map(|s| s.as_str())
+    }
+
     pub fn data_source(&self) -> Option<&str> {
         self.0
             .get("data source")
@@ -119,15 +96,26 @@ impl SqlConnStrBuilder {
             .map(|s| s.as_str())
     }
 
-    pub fn integrated_security(&self) -> bool {
-        self.0
+    pub fn integrated_security(&self) -> Result<bool, Error> {
+        match self
+            .0
             .get("integrated security")
             .or_else(|| self.0.get("trusted_connection"))
-            .map(|v| match v.to_lowercase().as_str() {
-                "true" | "sspi" | "1" => true,
-                _ => false,
-            })
-            .unwrap_or(false)
+        {
+            Some(s) => match s.to_lowercase().as_str() {
+                "true" | "yes" | "sspi" => Ok(true),
+                "false" | "no" => Ok(false),
+                _ => Err(Error::NotAValidBool(s.to_owned())),
+            },
+            None => Ok(false),
+        }
+    }
+
+    pub fn multiple_active_result_sets(&self) -> Result<bool, Error> {
+        match self.0.get("multipleactiveresultsets") {
+            Some(v) => parse_bool(v),
+            None => Ok(false),
+        }
     }
 
     pub fn password(&self) -> Option<&str> {
@@ -135,6 +123,13 @@ impl SqlConnStrBuilder {
             .get("password")
             .or_else(|| self.0.get("pwd"))
             .map(|s| s.as_str())
+    }
+
+    pub fn trust_server_certificate(&self) -> Result<bool, Error> {
+        match self.0.get("trustservercertificate") {
+            Some(v) => parse_bool(v),
+            None => Ok(false),
+        }
     }
 
     pub fn user_id(&self) -> Option<&str> {
@@ -146,17 +141,141 @@ impl SqlConnStrBuilder {
     }
 }
 
+/// A Sql Connection String parsing error
+#[derive(Clone, Debug)]
+pub enum Error {
+    KeyNotSupported(String),
+    NotAValidBool(String),
+    SyntaxError(usize),
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Error::KeyNotSupported(s) => write!(f, "connection string key `{}` not supported", s),
+            Error::NotAValidBool(s) => write!(f, "`{}` is not a valid boolean value", s),
+            Error::SyntaxError(index) => {
+                write!(f, "parsing of connection string failed at `{}`", index)
+            }
+        }
+    }
+}
+
+impl error::Error for Error {
+    fn description(&self) -> &str {
+        match self {
+            Error::KeyNotSupported(_) => "connection string key not supported",
+            Error::NotAValidBool(_) => "not a valid boolean value",
+            Error::SyntaxError(_) => "parsing of connection string failed",
+        }
+    }
+
+    fn cause(&self) -> Option<&error::Error> {
+        // Generic error, underlying cause isn't tracked.
+        None
+    }
+}
+
+/// Encode a key and value for use in a connection string
+///
+/// # Example
+///
+/// ```
+/// use conn_str::append_key_value;
+///
+/// let mut s = String::new();
+///
+/// append_key_value(&mut s, "database", "MasterDb", false);
+/// append_key_value(&mut s, "server", ".\\SQL2017", false);
+/// append_key_value(&mut s, "user id", "me", false);
+/// append_key_value(&mut s, "password", "pass=1", false);
+///
+/// assert_eq!("database=MasterDb;server=.\\SQL2017;user id=me;password=\"pass=1\"", &s);
+/// ```
+pub fn append_key_value(out: &mut String, key: &str, value: &str, use_odbc_rules: bool) {
+    if !out.is_empty() && !out.ends_with(';') {
+        out.push(';');
+    }
+
+    if use_odbc_rules {
+        out.push_str(key);
+    } else {
+        out.push_str(&key.replace("=", "=="));
+    }
+
+    out.push('=');
+
+    if use_odbc_rules {
+        // should quote the value
+        if !value.is_empty()
+            && (value.starts_with('{') || value.contains(';') || &value.to_lowercase() == "driver")
+            && !quote_odbc_value_match(value)
+        {
+            out.push('{');
+            out.push_str(&value.replace('}', "}}"));
+            out.push('}');
+        } else {
+            out.push_str(value);
+        }
+    }
+    // value already quoted!
+    else if quote_value_match(value) {
+        out.push_str(value)
+    }
+    // value contains double quote
+    else if value.contains('"') && !value.contains('\'') {
+        out.push('\'');
+        out.push_str(value);
+        out.push('\'');
+    }
+    // should quote the value
+    else {
+        out.push('"');
+        out.push_str(&value.replace('"', "\"\""));
+        out.push('"');
+    }
+}
+
+#[test]
+fn append_key_value_works() {
+    let mut out = String::new();
+    append_key_value(&mut out, "a", "test=2", false);
+    assert_eq!(&out, "a=\"test=2\"");
+}
+
+fn parse_bool(s: &str) -> Result<bool, Error> {
+    match s.to_lowercase().as_str() {
+        "true" | "yes" => Ok(true),
+        "false" | "no" => Ok(false),
+        _ => Err(Error::NotAValidBool(s.to_owned())),
+    }
+}
+
+fn quote_odbc_value_match(s: &str) -> bool {
+    // should be identical to the following regex
+    // ^{([^}]|}})*}$
+
+    if s.starts_with('{') && s.ends_with('}') {
+        let s = &s[1..s.len() - 1];
+        !s.contains('}') || s.contains("}}")
+    } else {
+        false
+    }
+}
+
+fn quote_value_match(s: &str) -> bool {
+    // should be identical to the following regex
+    // ^[^\"'=;\\s\\p{Cc}]*$
+
+    !s.chars().any(|c| {
+        c == '"' || c == '\'' || c == '=' || c == ';' || c.is_whitespace() || c.is_control()
+    })
+}
+
 #[test]
 fn sql_conn_builder_str_from_str_works() {
-    let s = r#"metadata=res://*/CashOnTime.csdl|res://*/CashOnTime.ssdl|res://*/CashOnTime.msl;provider=System.Data.SqlClient;provider connection string="data source=.\SQL2017;initial catalog=Trivia;integrated security=True;multipleactiveresultsets=True;application name=RustApp""#;
-    let e = EntityConnStrBuilder::from_str(s).unwrap();
-    let b = SqlConnStrBuilder::from_str(e.provider_connection_string().unwrap()).unwrap();
-
-    assert_eq!(".\\SQL2017", b.data_source().unwrap());
-    assert_eq!("Trivia", b.initial_catalog().unwrap());
-
     let s = r#"Data Source=.;Initial Catalog=MasterDb;Integrated Security=False;User ID=me;Password="special=321";MultipleActiveResultSets=True;Application Name=RustApp"#;
-    let b = SqlConnStrBuilder::from_str(s).unwrap();
+    let b = MsSqlConnStr::from_str(s).unwrap();
 
     assert_eq!("special=321", b.password().unwrap());
     assert_eq!("me", b.user_id().unwrap());
