@@ -152,6 +152,7 @@ impl MsSqlConnStr {
         match self
             .0
             .get("integrated security")
+            .or_else(|| self.0.get("integratedsecurity"))
             .or_else(|| self.0.get("trusted_connection"))
         {
             Some(s) => match s.to_lowercase().as_str() {
