@@ -1,35 +1,35 @@
 //! Database connection string parsing library for Rust.
-//! 
+//!
 //! This crate contains method to parse and extract part of a connection string in several formats.
 //! There is also the possibility to encode a connection string using the `append_key_value` function.
-//! 
+//!
 //! # Supported formats
-//! 
+//!
 //! - Entity Framework (from the .net framework)
 //! - MS SQL (from the .net framework System.Data.SqlClient)
-//! 
+//!
 //! # Example
-//! 
+//!
 //! ```
 //! use conn_str::{append_key_value, MsSqlConnStr};
 //! use std::str::FromStr;
-//! 
+//!
 //! fn main() {
 //!     let conn = "data source=.\\SQL2017;initial catalog=Db1;";
 //!     let conn = MsSqlConnStr::from_str(conn).unwrap();
-//! 
+//!
 //!     assert_eq!(".\\SQL2017", conn.data_source().unwrap());
 //!     assert_eq!("Db1", conn.initial_catalog().unwrap());
-//! 
+//!
 //!     let mut new_conn = String::new();
-//! 
+//!
 //!     append_key_value(&mut new_conn, "data source", conn.data_source().unwrap(), false);
 //!     append_key_value(&mut new_conn, "initial catalog", conn.initial_catalog().unwrap(), false);
 //!     
 //!     // add a user and a password to the connection string
 //!     append_key_value(&mut new_conn, "user id", "john", false);
 //!     append_key_value(&mut new_conn, "password", "Pass1=3", false);
-//! 
+//!
 //!     assert_eq!(&new_conn, r#"data source=.\SQL2017;initial catalog=Db1;user id=john;password="Pass1=3""#);
 //! }
 //! ```
@@ -94,7 +94,7 @@ impl EFConnStr {
 ///
 /// // gets the data_source
 /// assert_eq!(".\\Sql2017", conn.data_source().unwrap());
-/// 
+///
 /// // gets the initial catalog
 /// assert_eq!("Db1", conn.initial_catalog().unwrap());
 /// ```
@@ -134,6 +134,10 @@ impl MsSqlConnStr {
     }
 
     pub fn integrated_security(&self) -> Result<bool, Error> {
+        self.integrated_security_or(false)
+    }
+
+    pub fn integrated_security_or(&self, default: bool) -> Result<bool, Error> {
         match self
             .0
             .get("integrated security")
@@ -144,7 +148,7 @@ impl MsSqlConnStr {
                 "false" | "no" => Ok(false),
                 _ => Err(Error::NotAValidBool(s.to_owned())),
             },
-            None => Ok(false),
+            None => Ok(default),
         }
     }
 
@@ -163,9 +167,13 @@ impl MsSqlConnStr {
     }
 
     pub fn trust_server_certificate(&self) -> Result<bool, Error> {
+        self.trust_server_certificate_or(false)
+    }
+
+    pub fn trust_server_certificate_or(&self, default: bool) -> Result<bool, Error> {
         match self.0.get("trustservercertificate") {
             Some(v) => parse_bool(v),
-            None => Ok(false),
+            None => Ok(default),
         }
     }
 
