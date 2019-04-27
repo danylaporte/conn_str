@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["Error","A Sql Connection String parsing error"]],"fn":[["append_key_value","Encode a key and value for use in a connection string"]],"struct":[["EFConnStr","Represent an Entity Framework Connection String"],["MsSqlConnStr","Represent a Sql Connection String"]]});
